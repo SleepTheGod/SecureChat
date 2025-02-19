@@ -24,7 +24,7 @@ class SecureChatClient:
     def __init__(self):
         self.logger = self.setup_logging()
         print("Welcome to SecureChat - P2P Encrypted Chat with AES and Diffie-Hellman.")
-        print("If you don't know what you're doing, please read the README.md!")
+        print("Type /help for available commands.")
         
         self.IP = input("Enter the IP address you wish to chat with: ")
         self.PORT = int(input("Enter the port for communication: "))
@@ -54,7 +54,6 @@ class SecureChatClient:
         self.SendMSG()
 
     def setup_logging(self):
-        # Set up logging to monitor the chat's flow and detect anomalies
         logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
         return logging.getLogger(__name__)
 
@@ -96,23 +95,32 @@ class SecureChatClient:
 
     def SendMSG(self):
         clientsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        print(f"You are now talking to {self.IP}")
+        print(f"You're now talking to {self.IP}")
         while True:
-            message = input("")
-            if message.startswith("/send"):  
-                self.SendFILE(message.split(" ")[1])
-                continue
-            if message == "/leave":
+            command = input("Command: ").strip()
+            if command == "/leave":
                 message = self.EncryptMSG("\x03")
                 clientsock.sendto(message.encode(), (self.IP, self.PORT))
                 sys.exit(0)
-            if message.startswith("/msg"):
-                self.IP = message.split(" ")[1]
+            elif command.startswith("/msg"):
+                self.IP = command.split(" ")[1]
                 print(f"Now chatting with '{self.IP}'")
                 continue
+            elif command.startswith("/send"):
+                self.SendFILE(command.split(" ")[1])
+                continue
+            elif command == "/help":
+                self.show_help()
             else:
-                message = self.EncryptMSG("\x01" + message)
+                message = self.EncryptMSG("\x01" + command)
                 clientsock.sendto(message.encode(), (self.IP, self.PORT))
+
+    def show_help(self):
+        print("""Available commands:
+        /msg <ip> - Change the chat to a new IP address.
+        /send <filename> - Send a file (ensure it doesn't start with '.' or '/').
+        /leave - Exit the chat.
+        /help - Show this help message.""")
 
     def SendFILE(self, file_):
         if file_.startswith(".") or file_.startswith("/"):
@@ -121,12 +129,16 @@ class SecureChatClient:
         else:
             clientsock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             data = "\x02" + file_ + "\xFF"
-            with open(file_, "rb") as f:
-                data += f.read()
-            data = self.EncryptMSG(data)
-            clientsock.sendto(data.encode(), (self.IP, self.PORT))
-            print("File sent!")
-            self.logger.info(f"File {file_} sent successfully.")
+            try:
+                with open(file_, "rb") as f:
+                    data += f.read()
+                data = self.EncryptMSG(data)
+                clientsock.sendto(data.encode(), (self.IP, self.PORT))
+                print("File sent!")
+                self.logger.info(f"File {file_} sent successfully.")
+            except Exception as e:
+                print(f"Error sending file: {e}")
+                self.logger.error(f"Failed to send file: {file_} - {e}")
 
     def RecvMSG(self):
         serversocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
